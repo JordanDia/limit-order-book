@@ -58,11 +58,13 @@ TEST(OrderBook, IdsKeepGoingUp)
     OrderBook book;
 
     OrderId currentId = 1;
-    Price priceIncrease = 1000;
     for (std::size_t i = 0; i < 10; i++)
     {
         Side side = (i % 2 == 0) ? Side::Buy : Side::Sell;
-        AddResult result = book.AddLimit(side, 10000 + priceIncrease * i, 100u);
+        Price price = 10000;
+        if (side == Side::Sell)
+            price = 12000;
+        AddResult result = book.AddLimit(side, price, 100u);
 
         EXPECT_EQ(result.id, currentId);
         currentId++;
