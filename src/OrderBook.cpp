@@ -4,6 +4,9 @@
 
 AddResult OrderBook::AddLimit(Side side, Price price, Quantity qty)
 {
+    if (qty == 0 || price <= 0)
+        return { std::nullopt, {} };
+
     AddResult result { m_nextId, {} };
     
     Order order { m_nextId, side, price, qty };
@@ -23,6 +26,9 @@ AddResult OrderBook::AddLimit(Side side, Price price, Quantity qty)
 
 AddResult OrderBook::AddMarket(Side side, Quantity qty)
 {
+    if (qty == 0)
+        return { std::nullopt, {} };
+
     AddResult result { m_nextId, {} };
     Price price = (side == Side::Buy) ? std::numeric_limits<Price>::max() : std::numeric_limits<Price>::min();
     Order order { m_nextId, side, price, qty };

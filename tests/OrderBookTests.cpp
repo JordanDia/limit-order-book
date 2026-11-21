@@ -264,6 +264,19 @@ TEST(OrderBook, CancelledOrderDoesNotMatch)
     EXPECT_EQ(book.BestBid(), 13000);
 }
 
+TEST(OrderBook, CancelBestBidMovesToNextLevel)
+{
+    OrderBook book;
+    AddResult b1 = book.AddLimit(Side::Buy, 10000, 100u);
+
+    EXPECT_EQ(*book.BestBid(), 10000);
+
+    AddResult b2 = book.AddLimit(Side::Buy, 9000, 100u);
+    book.Cancel(*b1.id);
+
+    EXPECT_EQ(*book.BestBid(), 9000);
+}
+
 TEST(OrderBook, MarketBuyFillsAskInPriceOrder)
 {
     OrderBook book;
@@ -334,4 +347,43 @@ TEST(OrderBook, MarketOrderTradesAtRestingPrice)
 
     ASSERT_EQ(marketBuy.trades.size(), 1u);
     EXPECT_EQ(marketBuy.trades[0].price, 10000);
+}
+
+TEST(OrderBook, ZeroQuantityLimitIsRejected)
+{
+    OrderBook book;
+    book.AddLimit(Side::Sell, 10000, 100u);
+    AddResult buy = book.AddLimit(Side::Buy, 10000, 0u);
+
+    EXPECT_FALSE(buy.id.has_value());
+    EXPECT_TRUE(buy.trades.empty());
+    EXPECT_EQ(book.VolumeAt(Side::Sell, 10000), 100u);
+}
+
+TEST(OrderBook, ZeroQuantityMarketIsRejected)
+{
+    OrderBook book;
+    book.AddLimit(Side::Sell, 10000, 100u);
+    AddResult marketBuy = book.AddMarket(Side::Buy, 0u);
+
+    EXPECT_FALSE(marketBuy.id.has_value());
+    EXPECT_TRUE(marketBuy.trades.empty());
+    EXPECT_EQ(book.VolumeAt(Side::Sell, 10000), 100u);
+}
+
+TEST(OrderBook, NonPositiveLimitPriceIsRejected)
+{
+    OrderBook book;
+    book.AddLimit(Side::Buy, 10000, 200u);
+    AddResult bad1 = book.AddLimit(Side::Sell, -100, 100u);
+    AddResult bad2 = book.AddLimit(Side::Sell, 0, 100u);
+    AddResult validBuy = book.AddLimit(Side::Buy, 5000, 100u);
+
+    EXPECT_FALSE(bad1.id.has_value());
+    EXPECT_TRUE(bad1.trades.empty());
+    
+    EXPECT_FALSE(bad2.id.has_value());
+    EXPECT_TRUE(bad2.trades.empty());
+
+    EXPECT_EQ(*validBuy.id, 2u);
 }
