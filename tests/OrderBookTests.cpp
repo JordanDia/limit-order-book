@@ -388,3 +388,79 @@ TEST(OrderBook, NonPositiveLimitPriceIsRejected)
 
     EXPECT_EQ(*validBuy.id, 2u);
 }
+TEST(OrderBook, FullWorkedExample)
+{
+    OrderBook book;
+
+    // Starting book
+    OrderId b1 = *book.AddLimit(Side::Buy, 15000, 200u).id;
+    OrderId b2 = *book.AddLimit(Side::Buy, 15000, 150u).id;
+    OrderId b3 = *book.AddLimit(Side::Buy, 15000, 50u).id;
+    book.AddLimit(Side::Buy, 14999, 100u);
+    book.AddLimit(Side::Buy, 14998, 700u);
+
+    OrderId a1 = *book.AddLimit(Side::Sell, 15001, 300u).id;
+    OrderId a2 = *book.AddLimit(Side::Sell, 15002, 200u).id;
+    book.AddLimit(Side::Sell, 15003, 500u);
+
+    ASSERT_EQ(book.BestBid(), 15000);
+    ASSERT_EQ(book.BestAsk(), 15001);
+    ASSERT_EQ(book.VolumeAt(Side::Buy, 15000), 400u);
+
+    // Step 1: buy limit 250 @ 150.00 rests at the back of the queue
+    AddResult step1 = book.AddLimit(Side::Buy, 15000, 250u);
+    OrderId b4 = *step1.id;
+
+    EXPECT_TRUE(step1.trades.empty());
+    EXPECT_EQ(book.VolumeAt(Side::Buy, 15000), 650u);
+    EXPECT_EQ(book.BestBid(), 15000);
+
+    // Step 2: buy limit 400 @ 150.02 sweeps A1 and part of A2
+    AddResult step2 = book.AddLimit(Side::Buy, 15002, 400u);
+    OrderId b5 = *step2.id;
+
+    ASSERT_EQ(step2.trades.size(), 2u);
+    EXPECT_EQ(step2.trades[0].buyId, b5);
+    EXPECT_EQ(step2.trades[0].sellId, a1);
+    EXPECT_EQ(step2.trades[0].price, 15001);
+    EXPECT_EQ(step2.trades[0].quantity, 300u);
+
+    EXPECT_EQ(step2.trades[1].buyId, b5);
+    EXPECT_EQ(step2.trades[1].sellId, a2);
+    EXPECT_EQ(step2.trades[1].price, 15002);
+    EXPECT_EQ(step2.trades[1].quantity, 100u);
+
+    EXPECT_EQ(book.VolumeAt(Side::Sell, 15001), 0u);
+    EXPECT_EQ(book.VolumeAt(Side::Sell, 15002), 100u);
+    EXPECT_EQ(book.BestAsk(), 15002);
+    EXPECT_EQ(book.GetOrder(b5), nullptr);
+    EXPECT_EQ(book.GetOrder(a1), nullptr);
+    EXPECT_EQ(book.BestBid(), 15000);
+
+    // Step 3: market sell 500 takes B1, B2, B3, then 100 of B4
+    AddResult step3 = book.AddMarket(Side::Sell, 500u);
+    OrderId marketSell = *step3.id;
+
+    const OrderId expectedBuyIds[] = { b1, b2, b3, b4 };
+    const Quantity expectedQuantities[] = { 200u, 150u, 50u, 100u };
+
+    ASSERT_EQ(step3.trades.size(), 4u);
+    for (size_t i = 0; i < step3.trades.size(); i++)
+    {
+        EXPECT_EQ(step3.trades[i].buyId, expectedBuyIds[i]);
+        EXPECT_EQ(step3.trades[i].sellId, marketSell);
+        EXPECT_EQ(step3.trades[i].price, 15000);
+        EXPECT_EQ(step3.trades[i].quantity, expectedQuantities[i]);
+    }
+
+    ASSERT_NE(book.GetOrder(b4), nullptr);
+    EXPECT_EQ(book.GetOrder(b4)->quantity, 150u);
+    EXPECT_EQ(book.VolumeAt(Side::Buy, 15000), 150u);
+    EXPECT_EQ(book.BestBid(), 15000);
+
+    // Step 4: cancel B4 empties the 150.00 level
+    EXPECT_TRUE(book.Cancel(b4));
+    EXPECT_EQ(book.VolumeAt(Side::Buy, 15000), 0u);
+    EXPECT_EQ(book.BestBid(), 14999);
+    EXPECT_EQ(book.BestAsk(), 15002);
+}
