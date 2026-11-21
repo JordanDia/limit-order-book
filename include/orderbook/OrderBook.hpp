@@ -56,6 +56,7 @@ public:
 private:
     template<typename OppositeBook>
     void Match(Order& incoming, OppositeBook& opposite, std::vector<Trade>& trades);
+    void MatchIncoming(Order& incoming, std::vector<Trade>& trades);
 
 private:
     OrderId m_nextId = 1;

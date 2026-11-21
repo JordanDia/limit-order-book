@@ -1,5 +1,6 @@
 #include "orderbook/OrderBook.hpp"
 #include <algorithm>
+#include <limits>
 
 AddResult OrderBook::AddLimit(Side side, Price price, Quantity qty)
 {
@@ -7,10 +8,7 @@ AddResult OrderBook::AddLimit(Side side, Price price, Quantity qty)
     
     Order order { m_nextId, side, price, qty };
     
-    if (side == Side::Buy)
-        Match(order, m_asks, result.trades);
-    else
-        Match(order, m_bids, result.trades);
+    MatchIncoming(order, result.trades);
 
     if (order.quantity > 0)
     {
@@ -25,7 +23,14 @@ AddResult OrderBook::AddLimit(Side side, Price price, Quantity qty)
 
 AddResult OrderBook::AddMarket(Side side, Quantity qty)
 {
-    return AddResult();
+    AddResult result { m_nextId, {} };
+    Price price = (side == Side::Buy) ? std::numeric_limits<Price>::max() : std::numeric_limits<Price>::min();
+    Order order { m_nextId, side, price, qty };
+
+    MatchIncoming(order, result.trades);
+
+    m_nextId++;
+    return result;
 }
 
 bool OrderBook::Cancel(OrderId id)
@@ -148,4 +153,12 @@ void OrderBook::Match(Order& incoming, OppositeBook& opposite, std::vector<Trade
         if (level.empty())
             opposite.erase(opposite.begin());
     }
+}
+
+void OrderBook::MatchIncoming(Order& incoming, std::vector<Trade>& trades)
+{
+    if (incoming.side == Side::Buy)
+        Match(incoming, m_asks, trades);
+    else
+        Match(incoming, m_bids, trades);
 }

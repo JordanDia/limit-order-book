@@ -194,7 +194,7 @@ TEST(OrderBook, CancelRemovesOrder)
 
     EXPECT_TRUE(cancelResult);
     EXPECT_EQ(book.VolumeAt(Side::Buy, 12000), 0);
-    EXPECT_EQ(book.BestBid(), std::nullopt);
+    EXPECT_FALSE(book.BestBid().has_value());
     EXPECT_EQ(book.GetOrder(buy.id.value()), nullptr);
 }
 
@@ -262,4 +262,76 @@ TEST(OrderBook, CancelledOrderDoesNotMatch)
 
     EXPECT_TRUE(b2.trades.empty());
     EXPECT_EQ(book.BestBid(), 13000);
+}
+
+TEST(OrderBook, MarketBuyFillsAskInPriceOrder)
+{
+    OrderBook book;
+    book.AddLimit(Side::Sell, 10100, 100u);
+    book.AddLimit(Side::Sell, 10200, 100u);
+    AddResult marketBuy = book.AddMarket(Side::Buy, 200u);
+
+    ASSERT_EQ(marketBuy.trades.size(), 2u);
+    EXPECT_EQ(marketBuy.trades[0].price, 10100);
+    EXPECT_EQ(marketBuy.trades[1].price, 10200);
+}
+
+TEST(OrderBook, MarketSellFillsBidsInPriceOrder)
+{
+    OrderBook book;
+    book.AddLimit(Side::Buy, 10100, 100u);
+    book.AddLimit(Side::Buy, 10200, 100u);
+    AddResult marketSell = book.AddMarket(Side::Sell, 200u);
+
+    ASSERT_EQ(marketSell.trades.size(), 2u);
+    EXPECT_EQ(marketSell.trades[0].price, 10200);
+    EXPECT_EQ(marketSell.trades[1].price, 10100);
+}
+
+TEST(OrderBook, MarketOrderLeftoverDoesNotRest)
+{
+    OrderBook book;
+    book.AddLimit(Side::Sell, 10000, 50u);
+    AddResult marketBuy = book.AddMarket(Side::Buy, 80u);
+
+    ASSERT_FALSE(marketBuy.trades.empty());
+    EXPECT_EQ(marketBuy.trades[0].price, 10000);
+    EXPECT_EQ(marketBuy.trades[0].quantity, 50u);
+
+    EXPECT_FALSE(book.BestAsk().has_value());
+    EXPECT_FALSE(book.BestBid().has_value());
+}
+
+TEST(OrderBook, MarketOrderIntoEmptySideMakesNoTrades)
+{
+    OrderBook book;
+    AddResult marketBuy = book.AddMarket(Side::Buy, 200u);
+
+    EXPECT_TRUE(marketBuy.trades.empty());
+    EXPECT_FALSE(book.BestAsk().has_value());
+    EXPECT_FALSE(book.BestBid().has_value());
+}
+
+TEST(OrderBook, MarketOrderGetsIdButDoesNotRest)
+{
+    OrderBook book;
+    book.AddLimit(Side::Sell, 10000, 50u);
+    AddResult marketBuy = book.AddMarket(Side::Buy, 200u);
+    AddResult sell = book.AddLimit(Side::Sell, 12000, 50u);
+
+    EXPECT_EQ(marketBuy.id.value(), 2u);
+    EXPECT_EQ(*sell.id, *marketBuy.id + 1);
+
+    EXPECT_EQ(book.GetOrder(*marketBuy.id), nullptr);
+    EXPECT_FALSE(book.Cancel(*marketBuy.id));
+}
+
+TEST(OrderBook, MarketOrderTradesAtRestingPrice)
+{
+    OrderBook book;
+    book.AddLimit(Side::Sell, 10000, 50u);
+    AddResult marketBuy = book.AddMarket(Side::Buy, 100);
+
+    ASSERT_EQ(marketBuy.trades.size(), 1u);
+    EXPECT_EQ(marketBuy.trades[0].price, 10000);
 }
