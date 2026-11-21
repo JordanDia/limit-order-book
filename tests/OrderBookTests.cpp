@@ -269,12 +269,13 @@ TEST(OrderBook, CancelBestBidMovesToNextLevel)
     OrderBook book;
     AddResult b1 = book.AddLimit(Side::Buy, 10000, 100u);
 
-    EXPECT_EQ(*book.BestBid(), 10000);
+    EXPECT_EQ(book.BestBid(), 10000);
 
-    AddResult b2 = book.AddLimit(Side::Buy, 9000, 100u);
-    book.Cancel(*b1.id);
+    book.AddLimit(Side::Buy, 9000, 100u);
 
-    EXPECT_EQ(*book.BestBid(), 9000);
+    bool cancelSuccess = book.Cancel(*b1.id);
+    EXPECT_TRUE(cancelSuccess);
+    EXPECT_EQ(book.BestBid(), 9000);
 }
 
 TEST(OrderBook, MarketBuyFillsAskInPriceOrder)
